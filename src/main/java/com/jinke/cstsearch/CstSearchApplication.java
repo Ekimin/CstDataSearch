@@ -4,10 +4,8 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.jinke.cstsearch.dao.DBConnection;
-import com.jinke.cstsearch.model.CstContract;
-import com.jinke.cstsearch.model.CstInfo;
-import com.jinke.cstsearch.model.CstOrder;
-import com.jinke.cstsearch.model.CstVisit;
+import com.jinke.cstsearch.model.*;
+import com.jinke.cstsearch.util.DateManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -19,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 @SpringBootApplication
 @RestController
@@ -76,8 +77,6 @@ public class CstSearchApplication {
                 e.printStackTrace();
             }
         }
-
-
         return resultJson;
     }
 
@@ -109,7 +108,7 @@ public class CstSearchApplication {
                 cstOrder.setBldCjPrice(bldCjPrice);
                 cstOrder.setTnCjPrice(tnCjPrice);
                 cstOrder.setRoomTotal(roomTotal);
-                cstOrder.setYwblDate(ywblDate);
+                cstOrder.setYwblDate(ywblDate.substring(0,19));
                 jsonObject = JSON.parseObject(JSON.toJSONString(cstOrder));
                 jsonArray.add(jsonObject);
             }
@@ -178,7 +177,7 @@ public class CstSearchApplication {
             while (rs2.next()) {
                 JSONObject jsonObject = new JSONObject();
                 cstVisit.setCstName(rs2.getString("CstName"));
-                cstVisit.setVisitTime(rs2.getString("CheckinDate"));
+                cstVisit.setVisitTime(rs2.getString("CheckinDate").substring(0,19));
                 cstVisit.setVisitWay(rs2.getString("认知途径"));
                 cstVisit.setMobile(rs2.getString("Mobile"));
                 jsonObject = JSON.parseObject(JSON.toJSONString(cstVisit));
@@ -219,7 +218,7 @@ public class CstSearchApplication {
         DBConnection dbConnection = new DBConnection();
         dbConnection.getConnection(mySQLUrl, mySQLUsername, mySQLPassword, "sql server");
         String sql = "select BldArea,TnArea,BldCjPrice,TnCjPrice,HtTotal,SjBcTotal as '补差金额',ContractDate,JFDate,qyyxType as '全员营销类型'  from s_Contract " +
-                "where  Status='激活' and TradeGUID=(select TradeGuid from p_Customer p join s_Trade2Cst tc on p.CstGUID=tc.CstGUID where p.CstName=? and p.CardID=?)\n";
+                "where  Status='激活' and TradeGUID in (select TradeGuid from p_Customer p join s_Trade2Cst tc on p.CstGUID=tc.CstGUID where p.CstName=? and p.CardID=?)\n";
         CstContract cstContract = new CstContract();
         try {
             ps = dbConnection.conn.prepareStatement(sql);
@@ -236,7 +235,7 @@ public class CstSearchApplication {
                 cstContract.setTnCjPrice(rs.getString("TnCjPrice"));
                 cstContract.setContractDate(rs.getString("ContractDate"));
                 cstContract.setHtTotal(rs.getString("HtTotal"));
-                cstContract.setJFDate(rs.getString("JFDate"));
+                cstContract.setJFDate(rs.getString("JFDate").substring(0,19));
                 cstContract.setQyyxType(rs.getString("全员营销类型"));
                 cstContract.setSjBcTotal(rs.getString("补差金额"));
 
@@ -265,6 +264,31 @@ public class CstSearchApplication {
     @RequestMapping(value = "/api/cstservicepro", method = RequestMethod.GET)
     public JSONArray cstServicePro(@RequestParam("cstname") String cstName, @RequestParam("cardid") String cardId) {
         JSONArray jsonArray = new JSONArray();
+        String sql = "select top 1 * from s_ServiceProcess a join s_ServiceProcessHandle b on a.ServiceProcessGUID=b.ServiceProcessGUID and a.Kinds='按揭' where RoomGuid in (select RoomGuid from p_Customer p join s_Trade2Cst tc on p.CstGUID=tc.CstGUID where p.CstName=? and p.CardID=?)";
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        DBConnection dbConnection = new DBConnection();
+        dbConnection.getConnection(mySQLUrl, mySQLUsername, mySQLPassword, "sql server");
+        CstServiceProcess cstServiceProcess = new CstServiceProcess();
+        try {
+            ps = dbConnection.conn.prepareStatement(sql);
+            ps.setString(1, cstName);
+            ps.setString(2, cardId);
+            rs = ps.executeQuery();
+            if (rs.next()) {
+                cstServiceProcess.setCstName(cstName);
+                cstServiceProcess.setCardId(cardId);
+                cstServiceProcess.setJbr(rs.getString("jbr"));
+                cstServiceProcess.setKinds(rs.getString("Kinds"));
+                cstServiceProcess.setSteps(rs.getString("Steps"));
+                cstServiceProcess.setProcessName(rs.getString("ProcessName"));
+                cstServiceProcess.setProcessTime(rs.getString("CreateTime").substring(0,10));
+
+                jsonArray.add(JSON.parseObject(JSON.toJSONString(cstServiceProcess)));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
 
         return jsonArray;
     }
@@ -277,30 +301,31 @@ public class CstSearchApplication {
         DBConnection dbConnection = new DBConnection();
         dbConnection.getConnection(mySQLUrl, mySQLUsername, mySQLPassword, "sql server");
         String sql = "select BldArea,TnArea,BldCjPrice,TnCjPrice,HtTotal,SjBcTotal as '补差金额',ContractDate,JFDate,qyyxType as '全员营销类型'  from s_Contract " +
-                "where  Status='激活' and TradeGUID=(select TradeGuid from p_Customer p join s_Trade2Cst tc on p.CstGUID=tc.CstGUID where p.CstName=? and p.CardID=?)\n";
-        CstContract cstContract = new CstContract();
+                "where  Status='激活' and TradeGUID in (select TradeGuid from p_Customer p join s_Trade2Cst tc on p.CstGUID=tc.CstGUID where p.CstName=? and p.CardID=?)\n";
+        CstJFPro cstJFPro = new CstJFPro();
         try {
             ps = dbConnection.conn.prepareStatement(sql);
             ps.setString(1, cstName);
             ps.setString(2, cardId);
             rs = ps.executeQuery();
             while (rs.next()) {
-                JSONObject jsonObject = new JSONObject();
                 String jfDate = rs.getString("JFDate");
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                Date date1 = new Date();
+                try {
+                    date1 = sdf.parse(jfDate);
+                } catch (ParseException e) {
+                    e.printStackTrace();
+                }
+                cstJFPro.setJFDate(jfDate.substring(0,10));
+                long re = DateManager.compareTime(new Date(), date1);
+                if (re > 0) {
+                    cstJFPro.setJFStatus("已交房");
+                } else {
+                    cstJFPro.setJFStatus("未交房");
+                }
 
-                cstContract.setCstName(cstName);
-                cstContract.setCardId(cardId);
-                cstContract.setBldArea(rs.getString("BldArea"));
-                cstContract.setBldCjPrice(rs.getString("BldCjPrice"));
-                cstContract.setTnArea(rs.getString("TnArea"));
-                cstContract.setTnCjPrice(rs.getString("TnCjPrice"));
-                cstContract.setContractDate(rs.getString("ContractDate"));
-                cstContract.setHtTotal(rs.getString("HtTotal"));
-                cstContract.setJFDate(rs.getString("JFDate"));
-                cstContract.setQyyxType(rs.getString("全员营销类型"));
-                cstContract.setSjBcTotal(rs.getString("补差金额"));
-
-                jsonArray.add(JSON.parseObject(JSON.toJSONString(cstContract)));
+                jsonArray.add(JSON.parseObject(JSON.toJSONString(cstJFPro)));
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -317,33 +342,51 @@ public class CstSearchApplication {
                 e.printStackTrace();
             }
         }
-
         return jsonArray;
     }
 
 
     @RequestMapping(value = "/api/cstdata", method = RequestMethod.GET)
-    public JSONArray csttest(@RequestParam("cstname") String cstName, @RequestParam("cardid") String cardId) {
-        JSONArray resultJSON = new JSONArray();
+    public JSONArray csttest(@RequestParam("cstname") String cstName, @RequestParam("cardid") String cardId) throws ParseException {
+        JSONArray resultJSONArray = new JSONArray();
         //判断有几条成交信息
-        int count = 2;
-        for (int i = 1; i<= count; i++){
-            JSONArray jsonArray = new JSONArray();
-            JSONArray cstVisit = cstVisit(cstName, cardId); //到访
-            JSONArray cstOrder = cstOrder(cstName, cardId); //认购
-            JSONArray cstContract = cstContract(cstName, cardId); //合同
-            JSONArray cstServicePro = cstServicePro(cstName, cardId); //产证
-            JSONArray cstJFInfo = cstjfpro(cstName, cardId); //交房
+        JSONArray jsonArray = new JSONArray();
+        JSONArray cstVisit = cstVisit(cstName, cardId); //到访
+        JSONArray cstOrder = cstOrder(cstName, cardId); //认购
+        JSONArray cstContract = cstContract(cstName, cardId); //合同
+        JSONArray cstServicePro = cstServicePro(cstName, cardId); //产证
+        JSONArray cstJFInfo = cstjfpro(cstName, cardId); //交房
 
-            jsonArray.add(cstVisit);
-            jsonArray.add(cstOrder);
-            jsonArray.add(cstContract);
-            jsonArray.add(cstServicePro);
-            jsonArray.add(cstJFInfo);
-            resultJSON.add(jsonArray);
+        //--判断进度
+        //----判断有几个流程
+        int pCount = cstOrder.size();
+        int pValue = 1;
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        for (int j = 1; j <= pCount; j++) {
+            //long tmp1 = DateManager.compareTime(sdf.parse(((JSONObject) cstOrder.get(j - 1)).getString("ywblDate")), new Date());
+            if (DateManager.compareTime(sdf.parse(((JSONObject) cstOrder.get(j - 1)).getString("ywblDate")), new Date()) < 0) {
+                pValue++;
+            }
+            if (DateManager.compareTime(sdf.parse(((JSONObject) cstContract.get(j - 1)).getString("contractDate")), new Date()) < 0) {
+                pValue++;
+            }
+            if (cstServicePro.size() >= pCount && DateManager.compareTime(sdf.parse(((JSONObject) cstServicePro.get(j - 1)).getString("processTime")), new Date()) < 0) {
+                pValue++;
+            }
+            if (DateManager.compareTime(sdf.parse(((JSONObject) cstJFInfo.get(j - 1)).getString("jFDate")), new Date()) < 0) {
+                pValue = 5;
+            }
+            System.out.println(pValue + "--");
         }
 
-        return resultJSON;
+        jsonArray.add(cstVisit);
+        jsonArray.add(cstOrder);
+        jsonArray.add(cstContract);
+        jsonArray.add(cstServicePro);
+        jsonArray.add(cstJFInfo);
+        resultJSONArray.add(jsonArray);
+
+        return resultJSONArray;
     }
 
     public static void main(String[] args) {
