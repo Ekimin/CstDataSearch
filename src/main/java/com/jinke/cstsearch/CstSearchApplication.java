@@ -3,8 +3,10 @@ package com.jinke.cstsearch;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.jinke.cstsearch.dao.CommonMethod;
 import com.jinke.cstsearch.dao.DBConnection;
 import com.jinke.cstsearch.model.*;
+import com.jinke.cstsearch.model.json.CST_INFO;
 import com.jinke.cstsearch.util.DateManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -20,6 +22,8 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @SpringBootApplication
 @RestController
@@ -67,7 +71,7 @@ public class CstSearchApplication {
         } finally {
             try {
                 if (rs != null) {
-                    rs.close();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            rs.close();
                 }
                 if (ps != null) {
                     ps.close();
@@ -108,7 +112,7 @@ public class CstSearchApplication {
                 cstOrder.setBldCjPrice(bldCjPrice);
                 cstOrder.setTnCjPrice(tnCjPrice);
                 cstOrder.setRoomTotal(roomTotal);
-                cstOrder.setYwblDate(ywblDate.substring(0,19));
+                cstOrder.setYwblDate(ywblDate.substring(0, 19));
                 jsonObject = JSON.parseObject(JSON.toJSONString(cstOrder));
                 jsonArray.add(jsonObject);
             }
@@ -177,7 +181,7 @@ public class CstSearchApplication {
             while (rs2.next()) {
                 JSONObject jsonObject = new JSONObject();
                 cstVisit.setCstName(rs2.getString("CstName"));
-                cstVisit.setVisitTime(rs2.getString("CheckinDate").substring(0,19));
+                cstVisit.setVisitTime(rs2.getString("CheckinDate").substring(0, 19));
                 cstVisit.setVisitWay(rs2.getString("认知途径"));
                 cstVisit.setMobile(rs2.getString("Mobile"));
                 jsonObject = JSON.parseObject(JSON.toJSONString(cstVisit));
@@ -205,8 +209,6 @@ public class CstSearchApplication {
                 e.printStackTrace();
             }
         }
-
-
         return jsonArray;
     }
 
@@ -218,7 +220,7 @@ public class CstSearchApplication {
         DBConnection dbConnection = new DBConnection();
         dbConnection.getConnection(mySQLUrl, mySQLUsername, mySQLPassword, "sql server");
         String sql = "select BldArea,TnArea,BldCjPrice,TnCjPrice,HtTotal,SjBcTotal as '补差金额',ContractDate,JFDate,qyyxType as '全员营销类型'  from s_Contract " +
-                "where  Status='激活' and TradeGUID in (select TradeGuid from p_Customer p join s_Trade2Cst tc on p.CstGUID=tc.CstGUID where p.CstName=? and p.CardID=?)\n";
+                "where  Status='激活' and TradeGUID in (select TradeGuid from p_Customer p join s_Trade2Cst tc on p.CstGUID=tc.CstGUID where p.CstName=? and p.CardID=?)";
         CstContract cstContract = new CstContract();
         try {
             ps = dbConnection.conn.prepareStatement(sql);
@@ -235,7 +237,7 @@ public class CstSearchApplication {
                 cstContract.setTnCjPrice(rs.getString("TnCjPrice"));
                 cstContract.setContractDate(rs.getString("ContractDate"));
                 cstContract.setHtTotal(rs.getString("HtTotal"));
-                cstContract.setJFDate(rs.getString("JFDate").substring(0,19));
+                cstContract.setJFDate(rs.getString("JFDate").substring(0, 19));
                 cstContract.setQyyxType(rs.getString("全员营销类型"));
                 cstContract.setSjBcTotal(rs.getString("补差金额"));
 
@@ -282,7 +284,7 @@ public class CstSearchApplication {
                 cstServiceProcess.setKinds(rs.getString("Kinds"));
                 cstServiceProcess.setSteps(rs.getString("Steps"));
                 cstServiceProcess.setProcessName(rs.getString("ProcessName"));
-                cstServiceProcess.setProcessTime(rs.getString("CreateTime").substring(0,10));
+                cstServiceProcess.setProcessTime(rs.getString("CreateTime").substring(0, 10));
 
                 jsonArray.add(JSON.parseObject(JSON.toJSONString(cstServiceProcess)));
             }
@@ -317,7 +319,7 @@ public class CstSearchApplication {
                 } catch (ParseException e) {
                     e.printStackTrace();
                 }
-                cstJFPro.setJFDate(jfDate.substring(0,10));
+                cstJFPro.setJFDate(jfDate.substring(0, 10));
                 long re = DateManager.compareTime(new Date(), date1);
                 if (re > 0) {
                     cstJFPro.setJFStatus("已交房");
@@ -387,6 +389,91 @@ public class CstSearchApplication {
         resultJSONArray.add(jsonArray);
 
         return resultJSONArray;
+    }
+
+    @RequestMapping(value = "/api/cstsearch", method = RequestMethod.GET)
+    public JSONArray cstsearch(@RequestParam(value = "cstname") String cstName, @RequestParam(value = "cardid") String cardId) {
+        JSONArray jsonArray = new JSONArray();
+        DBConnection dbConnection = new DBConnection();
+        dbConnection.getConnection(mySQLUrl, mySQLUsername, mySQLPassword, "sql server");
+        //获取认购次数
+        CommonMethod method = new CommonMethod();
+        ResultSet tradeInfoRS = null;
+        PreparedStatement ps = null;
+        tradeInfoRS = method.getTradeInfo(dbConnection.conn, ps, tradeInfoRS, cstName, cardId);
+        Map<String, CST_INFO> resMap = new LinkedHashMap<>();
+        int rounds = 0;
+        try {
+            while (tradeInfoRS.next()) {
+                rounds++;
+                CST_INFO cst_info = new CST_INFO();
+
+                cst_info.setRounds(rounds);
+                cst_info.setCstName(cstName);
+                cst_info.setCardId(cardId);
+                cst_info.setCstGuid(tradeInfoRS.getString("CstGUID"));
+                cst_info.setMobile(tradeInfoRS.getString("MobileTel"));
+                cst_info.setAddress(tradeInfoRS.getString("Address"));
+                cst_info.setGender(tradeInfoRS.getString("Gender"));
+                cst_info.setCstType(tradeInfoRS.getString("CstType"));
+
+                String tradeGUID = tradeInfoRS.getString("TradeGUID");
+                cst_info.setTradeGUID(tradeGUID);
+                cst_info.setT2cGUID(tradeInfoRS.getString("Trade2CstGUID"));
+
+                //认购
+                cst_info.setRgBldArea(tradeInfoRS.getString("BldArea"));
+                cst_info.setRgTnCjPrice(tradeInfoRS.getString("TnArea"));
+                cst_info.setRgBldCjPrice(tradeInfoRS.getString("Price"));
+                cst_info.setRgTnCjPrice(tradeInfoRS.getString("TnPrice"));
+                cst_info.setRgRoomTotal(tradeInfoRS.getString("Total"));
+                cst_info.setRgYwblDate(tradeInfoRS.getString("YwblDate"));
+
+                // 根据交易GUID，查询到合同信息
+                ResultSet contractRS = method.getContractInfo(dbConnection.conn, tradeGUID);
+                if (contractRS.next()) {
+                    cst_info.setRommGuid(contractRS.getString("RoomGUID"));
+                    cst_info.setContractGUID(contractRS.getString("ContractGUID"));
+                    cst_info.setQyBldArea(contractRS.getString("BldArea"));
+                    cst_info.setQyTnArea(contractRS.getString("TnArea"));
+                    cst_info.setQyBldCjPrice(contractRS.getString("Price"));
+                    cst_info.setQyTnCjPrice(contractRS.getString("TnPrice"));
+                    cst_info.setQyHtTotal(contractRS.getString("Total"));
+                    String jfDate = contractRS.getString("JFDate");
+                    cst_info.setJFDate(jfDate);
+                    //是否交房
+                    if (DateManager.compareTimetoString(new Date(), jfDate) > 0) {
+                        cst_info.setJFStatus("已交房");
+                    } else {
+                        cst_info.setJFStatus("未交房");
+                    }
+                    cst_info.setQyYwblDate(contractRS.getString("YwblDate"));
+                }
+
+                // 根据RoomGuid，查询产证进度
+                ResultSet serviceRS = method.getServiceInfo(dbConnection.conn, tradeGUID);
+                if (serviceRS.next()) {
+                    cst_info.setServiceProcessGUID(contractRS.getString("ServiceProcessGUID"));
+                    cst_info.setSteps(contractRS.getString("steps"));
+                    cst_info.setKinds(contractRS.getString("Kinds"));
+                    cst_info.setProcessName(contractRS.getString("ProcessName"));
+                    cst_info.setJbr(contractRS.getString("Jbr"));
+                    cst_info.setProcessTime(contractRS.getString("CreateTime"));
+                }
+
+                //暂存map
+                resMap.put(tradeInfoRS.getString("TradeGUID"), cst_info);
+
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
+
+        }
+
+        jsonArray.add(JSON.parseObject(JSON.toJSONString(resMap)));
+
+        return jsonArray;
     }
 
     public static void main(String[] args) {
